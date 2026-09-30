@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   ArrowLeftRight,
   Mail,
+  ShieldCheck,
+  Lock,
 } from 'lucide-react';
 import { Programme, Milestone, FilterTab, UrgentMilestoneItem, ToastMessage, EmailNotificationRecord } from './types';
 import {
@@ -40,20 +42,37 @@ import { Toast } from './components/Toast';
 import { FxTreasuryModule } from './components/FxTreasuryModule';
 import { GoogleSheetsReportModal } from './components/GoogleSheetsReportModal';
 import { EmailNotificationModal } from './components/EmailNotificationModal';
+import { SendPaymentEmailModal } from './components/SendPaymentEmailModal';
+import { UserManagementModal } from './components/UserManagementModal';
+import { AuthModal } from './components/AuthModal';
 import {
   sendPaymentDisbursementEmail,
   isAutoEmailAlertsEnabled,
   getNotificationEmail,
 } from './utils/emailService';
+import { useAuth } from './context/AuthContext';
+import {
+  subscribeToProgrammes,
+  subscribeToAllProgrammes,
+  saveProgrammeDoc,
+  deleteProgrammeDoc,
+  logEmailNotificationDoc,
+} from './firebase/service';
 
 export default function App() {
-  const [programmes, setProgrammes] = useState<Programme[]>(() => loadStoredProgrammes());
+  const { user, role, isAdmin, hasPermission, openAuthModal } = useAuth();
+  const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [currentFilter, setCurrentFilter] = useState<FilterTab>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeNav, setActiveNav] = useState<string>('pipeline');
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState<boolean>(false);
+  const [isUserManagementOpen, setIsUserManagementOpen] = useState<boolean>(false);
+  const [emailModalTarget, setEmailModalTarget] = useState<{
+    programme: Programme;
+    milestone: Milestone;
+  } | null>(null);
   const [lastSentNotification, setLastSentNotification] = useState<EmailNotificationRecord | null>(null);
   const [editingProgramme, setEditingProgramme] = useState<Programme | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
@@ -62,6 +81,36 @@ export default function App() {
     const saved = localStorage.getItem('paytrack_theme');
     return saved === 'light' ? 'light' : 'dark';
   });
+
+  // Real-time synchronization with Firebase Firestore (Admins see all programmes; regular users see their tenant programmes)
+  useEffect(() => {
+    if (!user) {
+      // Clear data immediately when signed out to guarantee account privacy
+      setProgrammes([]);
+      return;
+    }
+
+    const unsubscribe = isAdmin
+      ? subscribeToAllProgrammes(
+          (cloudProgrammes) => {
+            setProgrammes(cloudProgrammes);
+          },
+          (err) => {
+            console.warn('Realtime all programmes subscription error:', err);
+          }
+        )
+      : subscribeToProgrammes(
+          user.uid,
+          (cloudProgrammes) => {
+            setProgrammes(cloudProgrammes);
+          },
+          (err) => {
+            console.warn('Realtime subscription error:', err);
+          }
+        );
+
+    return () => unsubscribe();
+  }, [user, isAdmin]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -253,11 +302,15 @@ export default function App() {
             };
           });
 
-          return { ...prog, milestones: updatedMilestones };
+          const updatedProg = { ...prog, milestones: updatedMilestones };
+          if (user) {
+            saveProgrammeDoc(updatedProg, user.uid).catch(console.error);
+          }
+          return updatedProg;
         })
       );
     },
-    [showToast]
+    [user, showToast]
   );
 
   // Toggle Invoice Received Checkbox
@@ -296,11 +349,15 @@ export default function App() {
             };
           });
 
-          return { ...prog, milestones: updatedMilestones };
+          const updatedProg = { ...prog, milestones: updatedMilestones };
+          if (user) {
+            saveProgrammeDoc(updatedProg, user.uid).catch(console.error);
+          }
+          return updatedProg;
         })
       );
     },
-    [showToast]
+    [user, showToast]
   );
 
   // Mark as Paid
@@ -312,6 +369,7 @@ export default function App() {
         prev.map((prog) => {
           if (prog.id !== programmeId) return prog;
 
+          let createdRecord: EmailNotificationRecord | null = null;
           const updatedMilestones = prog.milestones.map((m) => {
             if (m.id !== milestoneId) return m;
 
@@ -328,8 +386,8 @@ export default function App() {
 
             // Send notification to user email if enabled
             if (isAutoEmailAlertsEnabled()) {
-              const record = sendPaymentDisbursementEmail(prog, updatedMilestone);
-              setLastSentNotification(record);
+              createdRecord = sendPaymentDisbursementEmail(prog, updatedMilestone);
+              setLastSentNotification(createdRecord);
               showToast(
                 `📧 Notifikasi bayaran dihantar ke ${getNotificationEmail()}!`,
                 'info'
@@ -339,11 +397,23 @@ export default function App() {
             return updatedMilestone;
           });
 
-          return { ...prog, milestones: updatedMilestones };
+          const updatedProg = { ...prog, milestones: updatedMilestones };
+          const justPaidMilestone = updatedMilestones.find((m) => m.id === milestoneId);
+          if (justPaidMilestone) {
+            setEmailModalTarget({ programme: updatedProg, milestone: justPaidMilestone });
+          }
+
+          if (user) {
+            saveProgrammeDoc(updatedProg, user.uid).catch(console.error);
+            if (createdRecord) {
+              logEmailNotificationDoc(createdRecord, user.uid).catch(console.error);
+            }
+          }
+          return updatedProg;
         })
       );
     },
-    [showToast]
+    [user, showToast]
   );
 
   // Delete Programme
@@ -356,44 +426,75 @@ export default function App() {
         )
       ) {
         setProgrammes((prev) => prev.filter((p) => p.id !== programmeId));
+        if (user) {
+          deleteProgrammeDoc(programmeId).catch(console.error);
+        }
         showToast('Programme schedule removed successfully.', 'info');
       }
     },
-    [programmes, showToast]
+    [user, programmes, showToast]
   );
 
   // Add Programme
   const handleAddProgramme = useCallback(
     (newProgramme: Programme) => {
       setProgrammes((prev) => [newProgramme, ...prev]);
+      if (user) {
+        saveProgrammeDoc(newProgramme, user.uid).catch(console.error);
+      }
       showToast(`"${newProgramme.title}" added to active payment pipeline!`, 'success');
     },
-    [showToast]
+    [user, showToast]
   );
 
   // Update Programme
   const handleUpdateProgramme = useCallback(
     (updated: Programme) => {
       setProgrammes((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      if (user) {
+        saveProgrammeDoc(updated, user.uid).catch(console.error);
+      }
       showToast(`Updated details for "${updated.title}".`, 'info');
     },
-    [showToast]
+    [user, showToast]
   );
 
   // Load realistic samples
-  const handleLoadSampleData = useCallback(() => {
+  const handleLoadSampleData = useCallback(async () => {
+    if (!user) {
+      openAuthModal('signin');
+      showToast('Sila log masuk atau daftar akaun untuk menyimpan data ke akaun Firebase anda.', 'info');
+      return;
+    }
     const samples = getInitialSampleData();
     setProgrammes(samples);
-    showToast('Loaded 3 realistic TV licensing agreements with live SLA alerts!', 'success');
-  }, [showToast]);
+    try {
+      for (const prog of samples) {
+        await saveProgrammeDoc(prog, user.uid);
+      }
+      showToast('3 contoh kontrak industri berjaya disimpan ke akaun Firebase anda!', 'success');
+    } catch (err) {
+      console.error('Error saving samples to Firestore:', err);
+      showToast('Gagal memuat naik contoh ke Firebase.', 'error');
+    }
+  }, [user, openAuthModal, showToast]);
 
   // Reset all system data
-  const handleResetData = useCallback(() => {
-    if (window.confirm('This will wipe all tracked programmes from local storage. Continue?')) {
+  const handleResetData = useCallback(async () => {
+    if (window.confirm('Adakah anda pasti mahu memadam semua data program dari akaun Firebase anda?')) {
+      if (user) {
+        try {
+          for (const prog of programmes) {
+            await deleteProgrammeDoc(prog.id);
+          }
+        } catch (err) {
+          console.error('Error clearing Firestore documents:', err);
+        }
+      }
       setProgrammes([]);
-      showToast('All system tracking data has been cleared.', 'info');
+      showToast('Semua data program telah dipadam dari akaun anda.', 'info');
     }
-  }, [showToast]);
+  }, [user, programmes, showToast]);
 
   // Export JSON backup
   const handleExportJSON = useCallback(() => {
@@ -452,6 +553,7 @@ export default function App() {
         }}
         onOpenReportModal={() => setIsReportModalOpen(true)}
         onOpenEmailModal={() => setIsEmailModalOpen(true)}
+        onOpenUserManagement={() => setIsUserManagementOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -469,10 +571,46 @@ export default function App() {
             if (input) input.focus();
           }}
           onOpenEmailModal={() => setIsEmailModalOpen(true)}
+          onOpenUserManagement={() => setIsUserManagementOpen(true)}
         />
 
         {/* Workspace Canvas */}
         <main className="w-full pt-20 px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6 max-w-7xl mx-auto">
+          {/* Empty User Account State */}
+          {user && programmes.length === 0 && (
+            <div className="p-8 rounded-2xl bg-[#102034] border border-[#1b2b3f] text-center flex flex-col items-center justify-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#4d8eff]/15 text-[#adc6ff] flex items-center justify-center">
+                <CheckCircle2 className="w-6 h-6 text-[#4d8eff]" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[#d3e4fe]">
+                  Akaun Anda Sedia: Tiada Kontrak Lagi
+                </h3>
+                <p className="text-xs text-[#8c909f] max-w-md mt-1">
+                  Anda telah log masuk sebagai <strong>{user.email || user.displayName}</strong>. Data anda disimpan secara peribadi di Firebase Firestore. Tambah program TV pertama anda atau muat 3 contoh kontrak penyiaran untuk memulakan.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4d8eff] hover:bg-[#387bf6] text-[#00285d] text-xs font-bold transition-all shadow-md cursor-pointer"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>+ Tambah Program Baharu</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLoadSampleData}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0b1c30] hover:bg-[#1b2b3f] text-[#d3e4fe] border border-[#1b2b3f] text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4 text-emerald-400" />
+                  <span>Muat 3 Contoh Kontrak</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Nav Tab Content switchers if secondary screens clicked */}
           {activeNav === 'registry' && (
             <section className="bg-[#102034] p-6 rounded-xl border border-[#1b2b3f] shadow-sm flex flex-col gap-4">
@@ -728,16 +866,6 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={handleResetData}
-                className="flex items-center gap-1.5 px-3 h-9 bg-red-950/25 hover:bg-red-900/40 text-red-300 rounded text-xs font-medium transition-colors border border-red-500/30 shadow-xs active:scale-95"
-                title="Wipe local storage records"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>Reset System Data</span>
-              </button>
-
-              <button
-                type="button"
                 onClick={() => setActiveNav(activeNav === 'fx' ? 'pipeline' : 'fx')}
                 className={`flex items-center gap-1.5 px-3 h-9 rounded text-xs font-semibold transition-all border shadow-xs active:scale-95 ${
                   activeNav === 'fx'
@@ -770,6 +898,19 @@ export default function App() {
                 <span>Notifikasi Emel</span>
               </button>
 
+              {/* Admin Access & RBAC Controls */}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setIsUserManagementOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 h-9 bg-indigo-950/40 hover:bg-indigo-900/50 text-indigo-300 border border-indigo-500/40 rounded text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
+                  title="Urus pengguna dan tetapkan tahap penggunaan (RBAC)"
+                >
+                  <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                  <span>Urus Pengguna (RBAC)</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={handleExportJSON}
@@ -780,14 +921,26 @@ export default function App() {
                 <span>Export Backup</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setIsAddModalOpen(true)}
-                className="flex items-center gap-1.5 px-4 h-9 bg-[#4d8eff] hover:bg-[#adc6ff] text-[#00285d] rounded text-xs font-bold transition-all shadow-md active:scale-95"
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span>Add Programme</span>
-              </button>
+              {hasPermission('canCreateProgramme') ? (
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="flex items-center gap-1.5 px-4 h-9 bg-[#4d8eff] hover:bg-[#adc6ff] text-[#00285d] rounded text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Add Programme</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="flex items-center gap-1.5 px-4 h-9 bg-[#1b2b3f]/60 text-[#8c909f] border border-[#1b2b3f] rounded text-xs font-medium cursor-not-allowed opacity-60"
+                  title="Perlu peranan Editor atau Admin untuk menambah kontrak program baharu"
+                >
+                  <Lock className="w-3.5 h-3.5 text-[#8c909f]" />
+                  <span>Add Programme (Restricted)</span>
+                </button>
+              )}
             </div>
           </section>
 
@@ -820,6 +973,8 @@ export default function App() {
             onMarkAsPaid={handleMarkAsPaid}
             onDeleteProgramme={handleDeleteProgramme}
             onEditProgramme={(prog) => setEditingProgramme(prog)}
+            onOpenReportModal={() => setIsReportModalOpen(true)}
+            onSendPaymentEmail={(prog, milestone) => setEmailModalTarget({ programme: prog, milestone })}
             tabCounts={stats.tabCounts}
           />
         </main>
@@ -855,6 +1010,26 @@ export default function App() {
         onShowToast={showToast}
         lastSentNotification={lastSentNotification}
       />
+
+      {/* Send Payment Paid Notification via Email Modal */}
+      <SendPaymentEmailModal
+        isOpen={!!emailModalTarget}
+        programme={emailModalTarget?.programme || null}
+        milestone={emailModalTarget?.milestone || null}
+        onClose={() => setEmailModalTarget(null)}
+        onShowToast={showToast}
+        onEmailSent={(record) => setLastSentNotification(record)}
+      />
+
+      {/* Admin User Management & Usage Level Assignment (RBAC) Modal */}
+      <UserManagementModal
+        isOpen={isUserManagementOpen}
+        onClose={() => setIsUserManagementOpen(false)}
+        onShowToast={showToast}
+      />
+
+      {/* Multiple Login & Sign Up Authentication Modal */}
+      <AuthModal />
     </div>
   );
 }

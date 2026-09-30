@@ -19,6 +19,9 @@ export const Toast: React.FC<ToastProps> = ({ toasts, onDismiss }) => {
         if (toast.type === 'success') {
           bg = 'bg-emerald-800 text-white border border-emerald-600 shadow-lg';
           Icon = CheckCircle2;
+        } else if (toast.type === 'urgent') {
+          bg = 'bg-amber-800 text-amber-100 border border-amber-500 shadow-lg';
+          Icon = AlertTriangle;
         } else if (toast.type === 'warning' || toast.type === 'error') {
           bg = 'bg-[#93000a] text-[#ffdad6] border border-red-500/50 shadow-lg';
           Icon = AlertTriangle;

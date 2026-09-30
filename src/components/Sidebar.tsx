@@ -13,8 +13,13 @@ import {
   X,
   FileSpreadsheet,
   Mail,
+  Database,
+  Cloud,
+  Users,
 } from 'lucide-react';
 import { FilterTab } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { ROLE_LABELS } from '../utils/rbac';
 
 interface SidebarProps {
   urgentCount: number;
@@ -26,6 +31,7 @@ interface SidebarProps {
   onSelectNav: (nav: string) => void;
   onOpenReportModal?: () => void;
   onOpenEmailModal?: () => void;
+  onOpenUserManagement?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -38,7 +44,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectNav,
   onOpenReportModal,
   onOpenEmailModal,
+  onOpenUserManagement,
 }) => {
+  const { isCloudConnected, user, role, isAdmin, openAuthModal, signOutUser } = useAuth();
   return (
     <>
       {/* Mobile backdrop */}
@@ -236,10 +244,87 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </nav>
           </div>
+
+          {/* Administration & RBAC Section */}
+          <div className="px-4">
+            <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#8c909f] flex items-center justify-between">
+              <span>Akses & Pentadbiran</span>
+              {isAdmin && (
+                <span className="px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 text-[9px] font-bold">
+                  Admin
+                </span>
+              )}
+            </div>
+            <nav className="flex flex-col gap-1 mt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenUserManagement) onOpenUserManagement();
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded text-sm font-medium transition-all text-[#c2c6d6] hover:bg-indigo-950/30 hover:text-indigo-200 group border border-transparent hover:border-indigo-500/30"
+              >
+                <div className="flex items-center gap-3">
+                  <ShieldCheck className="w-4 h-4 shrink-0 text-indigo-400 group-hover:scale-110 transition-transform" />
+                  <span>Pengurusan Pengguna</span>
+                </div>
+                <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-bold">
+                  RBAC
+                </span>
+              </button>
+            </nav>
+          </div>
         </div>
 
         {/* Footer Meta & Financial Cycle */}
-        <div className="px-6 flex flex-col gap-4">
+        <div className="px-6 flex flex-col gap-3">
+          {/* Firebase Database Connection Status */}
+          <div className="p-2.5 rounded-lg bg-[#102034] border border-[#1b2b3f] flex flex-col gap-2 shadow-inner">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded bg-[#4d8eff]/10 border border-[#4d8eff]/30 flex items-center justify-center text-[#adc6ff]">
+                  <Database className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8c909f]">
+                    Firestore Cloud
+                  </span>
+                  <span className="text-xs font-semibold text-[#d3e4fe]">
+                    {user ? 'Akaun Aktif' : 'Log Masuk Diperlukan'}
+                  </span>
+                </div>
+              </div>
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isCloudConnected ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' : 'bg-amber-400'
+                }`}
+                title={isCloudConnected ? 'Firestore Connected' : 'Connecting to Firestore'}
+              />
+            </div>
+
+            {user ? (
+              <div className="pt-1.5 border-t border-[#1b2b3f] flex items-center justify-between text-xs">
+                <span className="text-[#8c909f] truncate max-w-[120px] text-[11px]" title={user.email || ''}>
+                  {user.displayName || user.email?.split('@')[0]}
+                </span>
+                <button
+                  type="button"
+                  onClick={signOutUser}
+                  className="text-red-400 hover:text-red-300 font-medium text-[11px] cursor-pointer"
+                >
+                  Log Keluar
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => openAuthModal('signin')}
+                className="w-full py-1.5 px-2 rounded bg-[#4d8eff]/15 hover:bg-[#4d8eff]/25 text-[#adc6ff] font-semibold text-xs text-center border border-[#4d8eff]/30 transition-colors cursor-pointer"
+              >
+                Log Masuk / Daftar Akaun
+              </button>
+            )}
+          </div>
+
           <div className="p-3 rounded bg-[#102034] border border-[#1b2b3f] flex flex-col gap-1 shadow-inner">
             <div className="flex items-center gap-1.5 text-[#8c909f]">
               <Lock className="w-3.5 h-3.5 text-amber-400" />

@@ -1,0 +1,130 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Diagnostic connection test endpoint
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Two designated admin accounts with full platform management authority
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email in ['mohdhafizaw89@gmail.com', 'admin2@rightsflow.com']
+      );
+    }
+
+    // User profile validation
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'email', 'createdAt']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.createdAt is string && data.createdAt.size() <= 64 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 120)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1024)) &&
+             (!('role' in data) || (data.role in ['admin', 'manager', 'editor', 'viewer'])) &&
+             (!('status' in data) || (data.status in ['active', 'suspended'])) &&
+             (!('permissions' in data) || (data.permissions is map)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64)) &&
+             (!('assignedBy' in data) || (data.assignedBy is string && data.assignedBy.size() <= 128));
+    }
+
+    // Programme validation
+    function isValidProgramme(data) {
+      return data.keys().hasAll(['id', 'userId', 'title', 'vendor', 'totalAmount', 'termKey', 'milestones', 'createdAt']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.title is string && data.title.size() <= 256 &&
+             data.vendor is string && data.vendor.size() <= 256 &&
+             (data.totalAmount is int || data.totalAmount is float) &&
+             data.termKey is string && data.termKey.size() <= 64 &&
+             data.milestones is list && data.milestones.size() <= 20 &&
+             data.createdAt is string && data.createdAt.size() <= 64 &&
+             (!('termsLabel' in data) || (data.termsLabel is string && data.termsLabel.size() <= 128)) &&
+             (!('contractRef' in data) || (data.contractRef is string && data.contractRef.size() <= 128)) &&
+             (!('rightsType' in data) || (data.rightsType is string && data.rightsType.size() <= 128)) &&
+             (!('currency' in data) || (data.currency is string && data.currency.size() <= 16)) &&
+             (!('agreementSignDate' in data) || (data.agreementSignDate is string && data.agreementSignDate.size() <= 64)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    // Email notification validation
+    function isValidEmailNotification(data) {
+      return data.keys().hasAll(['id', 'userId', 'recipientEmail', 'programmeTitle', 'amount', 'sentAt', 'status']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.recipientEmail is string && data.recipientEmail.size() <= 256 &&
+             data.programmeTitle is string && data.programmeTitle.size() <= 256 &&
+             (data.amount is int || data.amount is float) &&
+             data.sentAt is string && data.sentAt.size() <= 64 &&
+             data.status is string && data.status.size() <= 32 &&
+             (!('contractRef' in data) || (data.contractRef is string && data.contractRef.size() <= 128)) &&
+             (!('vendor' in data) || (data.vendor is string && data.vendor.size() <= 256)) &&
+             (!('milestoneTitle' in data) || (data.milestoneTitle is string && data.milestoneTitle.size() <= 256)) &&
+             (!('paidDate' in data) || (data.paidDate is string && data.paidDate.size() <= 64)) &&
+             (!('subject' in data) || (data.subject is string && data.subject.size() <= 512)) &&
+             (!('body' in data) || (data.body is string && data.body.size() <= 4096));
+    }
+
+    // Users Collection with Role-Based Access Control
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(incoming()) && incoming().id == userId &&
+                    (!('role' in incoming()) || incoming().role != 'admin' || isAdmin());
+      allow update: if isValidId(userId) && isValidUser(incoming()) && incoming().id == userId && incoming().createdAt == existing().createdAt && (
+        isAdmin() ||
+        (isOwner(userId) && (!('role' in incoming()) || incoming().role == existing().role) && (!('permissions' in incoming()) || incoming().permissions == existing().permissions))
+      );
+      allow delete: if isValidId(userId) && (isAdmin() || isOwner(userId));
+    }
+
+    // TV Programmes Collection (Admin has global cross-tenant access)
+    match /programmes/{programmeId} {
+      allow get: if isSignedIn() && isValidId(programmeId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || request.auth.token.email in ['mohdhafizaw89@gmail.com', 'admin2@rightsflow.com']);
+      allow create: if isSignedIn() && isValidId(programmeId) && isValidProgramme(incoming()) && (incoming().userId == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && isValidId(programmeId) && isValidProgramme(incoming()) && (
+        isAdmin() ||
+        (existing().userId == request.auth.uid && incoming().userId == existing().userId && incoming().createdAt == existing().createdAt)
+      );
+      allow delete: if isSignedIn() && isValidId(programmeId) && (isAdmin() || existing().userId == request.auth.uid);
+    }
+
+    // Remittance Email Audit Logs
+    match /emailNotifications/{notificationId} {
+      allow get: if isSignedIn() && isValidId(notificationId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || request.auth.token.email in ['mohdhafizaw89@gmail.com', 'admin2@rightsflow.com']);
+      allow create: if isSignedIn() && isValidId(notificationId) && isValidEmailNotification(incoming()) && (incoming().userId == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && isValidId(notificationId) && isValidEmailNotification(incoming()) && (isAdmin() || (existing().userId == request.auth.uid && incoming().userId == existing().userId));
+      allow delete: if isSignedIn() && isValidId(notificationId) && (isAdmin() || existing().userId == request.auth.uid);
+    }
+  }
+}

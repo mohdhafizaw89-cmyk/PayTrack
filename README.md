@@ -6,6 +6,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6.x-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4.0-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![Firebase](https://img.shields.io/badge/Firebase-Firestore_%26_Auth-FFA611?logo=firebase&logoColor=black)](https://firebase.google.com/)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 ---
@@ -47,17 +48,25 @@ The platform eliminates costly broadcast compliance penalties and vendor frictio
 - Standardized remittance advice generation with automatic email dispatch logging.
 - Formats vendor name, contract reference, milestone tranche, bank settlement amount, and payment timestamp for accounts payable records.
 
-### 5. 📊 Reporting, Audit Trails & CSV / Google Sheets Export
-- Instant reconciliation reports ready for broadcast auditors and finance directors.
+### 5. 📊 Reporting, Audit Trails & Google Sheets (.xlsx) Download
+- **Native Google Sheets / Excel (.xlsx) Export**: One-click download with auto-fitted columns, numeric cell formats, and multi-sheet support ready to open directly in Google Sheets.
+- **CSV (UTF-8 with BOM)**: High-compatibility CSV download for legacy spreadsheets and finance ERP systems.
+- **Instant Google Sheets Paste (TSV)**: Copy formatted tables directly to clipboard and press `Ctrl+V` on `sheets.new`.
 - Filter and export by:
-  - All programmes and contracts
-  - Urgent 7-day window queue
-  - Awaiting material/invoice deliverables
+  - All programmes and contracts ledger
+  - Urgent 7-day payment reminder window queue
+  - Vendor & distributor exposure summary
   - Settled & paid history
 
 ### 6. 🌗 Broadcast Operations Dual Theme
 - **Studio Dark Mode**: High-contrast, low-eyestrain navy palette designed for broadcast control room environments.
 - **Office Light Mode**: Clean, daylight-optimized theme for administrative desks and executive reporting.
+
+### 7. ☁️ Firebase Firestore & Multi-Account Authentication
+- **Multiple Login Options**: Choose between Google One-Tap Sign-In or standard Email & Password (with dedicated **Daftar Akaun / Sign Up** and **Log Masuk / Sign In** forms).
+- **Strict User Account Isolation**: Each authenticated user accesses and manages strictly their own television programme contracts and payment records. No cross-tenant data leakage.
+- **Real-Time Cloud Synchronization**: Instant bi-directional sync powered by Firestore `onSnapshot`.
+- **ABAC Zero-Trust Rules**: Server-side enforced security rules (`firestore.rules`) with data ownership verification (`resource.data.userId == request.auth.uid`).
 
 ---
 

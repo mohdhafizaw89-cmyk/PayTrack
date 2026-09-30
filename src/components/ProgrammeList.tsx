@@ -13,9 +13,13 @@ import {
   Receipt,
   Wallet,
   FileSignature,
+  FileSpreadsheet,
+  Mail,
+  Lock,
 } from 'lucide-react';
-import { Programme, FilterTab } from '../types';
+import { Programme, Milestone, FilterTab } from '../types';
 import { formatUSD, getDaysDiffFromToday } from '../utils/dateUtils';
+import { useAuth } from '../context/AuthContext';
 
 interface ProgrammeListProps {
   programmes: Programme[];
@@ -28,6 +32,8 @@ interface ProgrammeListProps {
   onMarkAsPaid: (programmeId: string, milestoneId: string) => void;
   onDeleteProgramme: (programmeId: string) => void;
   onEditProgramme: (programme: Programme) => void;
+  onOpenReportModal?: () => void;
+  onSendPaymentEmail?: (programme: Programme, milestone: Milestone) => void;
   tabCounts: {
     all: number;
     due7: number;
@@ -47,8 +53,16 @@ export const ProgrammeList: React.FC<ProgrammeListProps> = ({
   onMarkAsPaid,
   onDeleteProgramme,
   onEditProgramme,
+  onOpenReportModal,
+  onSendPaymentEmail,
   tabCounts,
 }) => {
+  const { hasPermission } = useAuth();
+  const canEdit = hasPermission('canEditProgramme');
+  const canDelete = hasPermission('canDeleteProgramme');
+  const canMarkPaid = hasPermission('canMarkPaid');
+  const canSendEmail = hasPermission('canSendEmail');
+
   return (
     <div className="flex flex-col gap-6">
       {/* Search, Filter & Content Controls Bar */}
@@ -104,9 +118,9 @@ export const ProgrammeList: React.FC<ProgrammeListProps> = ({
           </button>
         </div>
 
-        {/* Search Input Box */}
-        <div className="flex items-center gap-2 w-full md:w-80 shrink-0">
-          <div className="relative w-full">
+        {/* Search Input Box & Google Sheets Export Action */}
+        <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0">
+          <div className="relative flex-1 md:w-72">
             <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-[#8c909f]" />
             <input
               type="text"
@@ -116,15 +130,28 @@ export const ProgrammeList: React.FC<ProgrammeListProps> = ({
               placeholder="Search programme or vendor..."
               className="w-full h-9 pl-9 pr-3 bg-[#000f21] text-[#d3e4fe] placeholder:text-[#8c909f] text-xs rounded border border-[#1b2b3f] outline-none focus:border-[#4d8eff] focus:bg-[#102034] transition-all"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => onSearchChange('')}
+                className="absolute right-2 top-2 p-0.5 text-[#8c909f] hover:text-[#d3e4fe] rounded transition-colors"
+                title="Clear Search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
-          {searchQuery && (
+
+          {onOpenReportModal && (
             <button
               type="button"
-              onClick={() => onSearchChange('')}
-              className="h-9 px-2 bg-[#000f21] border border-[#1b2b3f] text-[#8c909f] hover:text-[#d3e4fe] rounded flex items-center justify-center transition-colors"
-              title="Clear Search"
+              onClick={onOpenReportModal}
+              className="h-9 px-3 bg-emerald-600/15 hover:bg-emerald-600/25 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 rounded-lg flex items-center gap-1.5 text-xs font-semibold shrink-0 transition-all cursor-pointer shadow-xs active:scale-95"
+              title="Muat turun data dalam format Google Sheets (.xlsx) atau CSV"
             >
-              <X className="w-4 h-4" />
+              <FileSpreadsheet className="w-4 h-4" />
+              <span className="hidden sm:inline">Download Google Sheet</span>
+              <span className="sm:hidden">Sheets</span>
             </button>
           )}
         </div>
@@ -226,23 +253,27 @@ export const ProgrammeList: React.FC<ProgrammeListProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => onEditProgramme(prog)}
-                        className="h-8 w-8 rounded bg-[#000f21] text-[#8c909f] hover:text-[#adc6ff] hover:bg-[#1b2b3f] border border-[#1b2b3f] flex items-center justify-center transition-colors"
-                        title="Edit Programme Details"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => onEditProgramme(prog)}
+                          className="h-8 w-8 rounded bg-[#000f21] text-[#8c909f] hover:text-[#adc6ff] hover:bg-[#1b2b3f] border border-[#1b2b3f] flex items-center justify-center transition-colors cursor-pointer"
+                          title="Edit Programme Details"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
 
-                      <button
-                        type="button"
-                        onClick={() => onDeleteProgramme(prog.id)}
-                        className="h-8 w-8 rounded bg-[#000f21] text-[#8c909f] hover:text-red-400 hover:bg-red-950/20 border border-[#1b2b3f] flex items-center justify-center transition-colors"
-                        title="Delete Programme"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => onDeleteProgramme(prog.id)}
+                          className="h-8 w-8 rounded bg-[#000f21] text-[#8c909f] hover:text-red-400 hover:bg-red-950/20 border border-[#1b2b3f] flex items-center justify-center transition-colors cursor-pointer"
+                          title="Delete Programme"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -394,27 +425,45 @@ export const ProgrammeList: React.FC<ProgrammeListProps> = ({
                             {/* Settlement Action */}
                             <td className="py-3.5 px-4 lg:px-6 text-right">
                               {isPaid ? (
-                                <span className="inline-flex items-center gap-1.5 text-emerald-400 text-xs font-medium">
-                                  <Check className="w-4 h-4" />
-                                  <span>Settled</span>
-                                </span>
+                                <div className="flex items-center justify-end gap-2">
+                                  <span className="inline-flex items-center gap-1.5 text-emerald-400 text-xs font-medium">
+                                    <Check className="w-4 h-4" />
+                                    <span>Settled</span>
+                                  </span>
+                                  {canSendEmail && onSendPaymentEmail && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onSendPaymentEmail(prog, m)}
+                                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#000f21] hover:bg-[#1b2b3f] text-[#adc6ff] hover:text-[#d3e4fe] border border-[#1b2b3f] text-[11px] font-semibold transition-all cursor-pointer shadow-xs active:scale-95"
+                                      title="Hantar notifikasi pengesahan pembayaran melalui emel"
+                                    >
+                                      <Mail className="w-3.5 h-3.5 text-emerald-400" />
+                                      <span className="hidden sm:inline">Hantar Emel</span>
+                                    </button>
+                                  )}
+                                </div>
                               ) : (
                                 <button
                                   type="button"
-                                  disabled={!isPending}
-                                  onClick={() => onMarkAsPaid(prog.id, m.id)}
-                                  className={`h-8 px-3.5 rounded text-xs font-semibold transition-all ${
-                                    isPending
-                                      ? 'bg-[#4d8eff] text-[#00285d] hover:bg-[#adc6ff] shadow-xs active:scale-95'
+                                  disabled={!isPending || !canMarkPaid}
+                                  onClick={() => canMarkPaid && onMarkAsPaid(prog.id, m.id)}
+                                  className={`h-8 px-3.5 rounded text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                                    !canMarkPaid
+                                      ? 'bg-[#1b2b3f]/70 text-[#8c909f] cursor-not-allowed opacity-60 border border-[#1b2b3f]'
+                                      : isPending
+                                      ? 'bg-[#4d8eff] text-[#00285d] hover:bg-[#adc6ff] shadow-xs active:scale-95 cursor-pointer'
                                       : 'bg-[#1b2b3f] text-[#8c909f] cursor-not-allowed opacity-40'
                                   }`}
                                   title={
-                                    isPending
+                                    !canMarkPaid
+                                      ? 'Akses Pengurus/Admin diperlukan untuk meluluskan bayaran'
+                                      : isPending
                                       ? 'Mark this milestone disbursement as settled'
                                       : 'Awaiting both material delivery & invoice verification before settlement'
                                   }
                                 >
-                                  Mark as Paid
+                                  {!canMarkPaid && <Lock className="w-3 h-3 text-[#8c909f]" />}
+                                  <span>Mark as Paid</span>
                                 </button>
                               )}
                             </td>

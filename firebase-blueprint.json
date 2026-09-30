@@ -1,0 +1,226 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents an authenticated television network or rights buyer profile",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The unique Firebase Auth UID of the user",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "maxLength": 256
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name",
+          "maxLength": 120
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Avatar photo URL",
+          "maxLength": 1024
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Account registration timestamp",
+          "maxLength": 64
+        },
+        "role": {
+          "type": "string",
+          "description": "User permission role tier: admin, manager, editor, viewer",
+          "maxLength": 32,
+          "enum": ["admin", "manager", "editor", "viewer"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Account status: active or suspended",
+          "maxLength": 32,
+          "enum": ["active", "suspended"]
+        },
+        "permissions": {
+          "type": "object",
+          "description": "Granular functional capabilities assigned by admin"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Role update timestamp",
+          "maxLength": 64
+        },
+        "assignedBy": {
+          "type": "string",
+          "description": "Email or UID of admin who assigned this role",
+          "maxLength": 128
+        }
+      },
+      "required": ["id", "email", "createdAt"]
+    },
+    "Programme": {
+      "title": "Programme",
+      "description": "TV programme acquisition contract with rights details and milestone payment schedule",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the programme contract",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the contract manager",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the TV programme or series",
+          "maxLength": 256
+        },
+        "vendor": {
+          "type": "string",
+          "description": "Name of distributor, studio, or production house",
+          "maxLength": 256
+        },
+        "contractRef": {
+          "type": "string",
+          "description": "Legal contract reference or deal memo number",
+          "maxLength": 128
+        },
+        "totalAmount": {
+          "type": "number",
+          "description": "Total contract value"
+        },
+        "termKey": {
+          "type": "string",
+          "description": "Payment schedule identifier (e.g., 30_70, 50_50)",
+          "maxLength": 64
+        },
+        "termsLabel": {
+          "type": "string",
+          "description": "Human-readable label of the payment schedule",
+          "maxLength": 128
+        },
+        "milestones": {
+          "type": "array",
+          "description": "List of milestones with 7-day countdown trigger flags and statuses"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation ISO date string",
+          "maxLength": 64
+        },
+        "agreementSignDate": {
+          "type": "string",
+          "description": "Contract signing date",
+          "maxLength": 64
+        },
+        "rightsType": {
+          "type": "string",
+          "description": "Broadcast rights scope (Linear, SVOD, Pay-TV, etc.)",
+          "maxLength": 128
+        },
+        "currency": {
+          "type": "string",
+          "description": "Contract settlement currency (USD, MYR, EUR, etc.)",
+          "maxLength": 16
+        }
+      },
+      "required": ["id", "userId", "title", "vendor", "totalAmount", "termKey", "milestones", "createdAt"]
+    },
+    "EmailNotification": {
+      "title": "EmailNotification",
+      "description": "Audit record of remittance advice dispatched to vendor",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique notification log identifier",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the sender",
+          "maxLength": 128
+        },
+        "recipientEmail": {
+          "type": "string",
+          "description": "Vendor contact email",
+          "maxLength": 256
+        },
+        "programmeTitle": {
+          "type": "string",
+          "description": "Name of the programme",
+          "maxLength": 256
+        },
+        "contractRef": {
+          "type": "string",
+          "description": "Contract reference number",
+          "maxLength": 128
+        },
+        "vendor": {
+          "type": "string",
+          "description": "Vendor company name",
+          "maxLength": 256
+        },
+        "milestoneTitle": {
+          "type": "string",
+          "description": "Tranche milestone name",
+          "maxLength": 256
+        },
+        "amount": {
+          "type": "number",
+          "description": "Disbursed payment amount"
+        },
+        "paidDate": {
+          "type": "string",
+          "description": "Settlement date",
+          "maxLength": 64
+        },
+        "sentAt": {
+          "type": "string",
+          "description": "Transmission timestamp",
+          "maxLength": 64
+        },
+        "subject": {
+          "type": "string",
+          "description": "Email subject header",
+          "maxLength": 512
+        },
+        "body": {
+          "type": "string",
+          "description": "Email text content",
+          "maxLength": 4096
+        },
+        "status": {
+          "type": "string",
+          "description": "Delivery status (sent, pending)",
+          "maxLength": 32
+        }
+      },
+      "required": ["id", "userId", "recipientEmail", "programmeTitle", "amount", "sentAt", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Individual user profiles with private account metadata"
+    },
+    "/programmes/{programmeId}": {
+      "schema": {
+        "$ref": "#/entities/Programme"
+      },
+      "description": "TV programme acquisition contracts and payment milestones"
+    },
+    "/emailNotifications/{notificationId}": {
+      "schema": {
+        "$ref": "#/entities/EmailNotification"
+      },
+      "description": "Disbursement remittance notification audit log"
+    }
+  }
+}

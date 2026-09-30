@@ -28,6 +28,34 @@ export interface Programme {
   agreementSignDate?: string;
   rightsType?: string;
   currency?: string;
+  userId?: string;
+  updatedAt?: string;
+}
+
+export type UserRole = 'admin' | 'manager' | 'editor' | 'viewer';
+
+export interface UserPermissions {
+  canCreateProgramme: boolean;
+  canEditProgramme: boolean;
+  canDeleteProgramme: boolean;
+  canMarkPaid: boolean;
+  canSendEmail: boolean;
+  canExportReports: boolean;
+  canManageFx: boolean;
+  canManageUsers: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  displayName?: string;
+  photoURL?: string;
+  role: UserRole;
+  permissions?: Partial<UserPermissions>;
+  status?: 'active' | 'suspended';
+  createdAt: string;
+  updatedAt?: string;
+  assignedBy?: string;
 }
 
 export interface UrgentMilestoneItem {
@@ -45,7 +73,7 @@ export type FilterTab = 'all' | 'due7' | 'awaiting' | 'paid';
 export interface ToastMessage {
   id: string;
   message: string;
-  type: 'info' | 'success' | 'warning' | 'error';
+  type: 'info' | 'success' | 'warning' | 'error' | 'urgent';
 }
 
 export interface EmailNotificationRecord {

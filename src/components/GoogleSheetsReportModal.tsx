@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import {
   FileSpreadsheet,
   Download,
@@ -238,6 +239,45 @@ export const GoogleSheetsReportModal: React.FC<GoogleSheetsReportModalProps> = (
     return [headerLine, ...rowLines].join('\n');
   };
 
+  const handleDownloadGoogleSheetXLSX = () => {
+    try {
+      const { headers, rows } = generateData();
+      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+      // Calculate auto-fit column widths
+      const colWidths = headers.map((header, colIdx) => {
+        let maxLen = header.length;
+        rows.forEach((row) => {
+          const val = row[colIdx];
+          const len = val !== null && val !== undefined ? String(val).length : 0;
+          if (len > maxLen) maxLen = len;
+        });
+        return { wch: Math.min(Math.max(maxLen + 3, 12), 45) };
+      });
+      worksheet['!cols'] = colWidths;
+
+      const workbook = XLSX.utils.book_new();
+      const sheetName =
+        reportType === 'urgent7'
+          ? 'SLA_7Day_Urgent'
+          : reportType === 'vendor_summary'
+          ? 'Vendor_Summary'
+          : 'RightsFlow_Master';
+
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+      const dateStr = new Date().toISOString().split('T')[0];
+      const filename = `PayTrack_GoogleSheets_${reportType}_${dateStr}.xlsx`;
+
+      XLSX.writeFile(workbook, filename);
+      onShowToast(`Laporan format Google Sheets (${filename}) berjaya dimuat turun!`, 'success');
+    } catch (err) {
+      console.error('Failed to generate Google Sheets XLSX:', err);
+      onShowToast('Gagal menjana fail Google Sheets. Menggunakan muat turun CSV.', 'warning');
+      handleDownloadCSV();
+    }
+  };
+
   const handleDownloadCSV = () => {
     const csvContent = generateCSV();
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -253,7 +293,7 @@ export const GoogleSheetsReportModal: React.FC<GoogleSheetsReportModalProps> = (
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    onShowToast(`Laporan format Google Sheets (${filename}) berjaya dimuat turun!`, 'success');
+    onShowToast(`Laporan CSV (${filename}) berjaya dimuat turun!`, 'success');
   };
 
   const handleCopyToClipboard = async () => {
@@ -416,19 +456,31 @@ export const GoogleSheetsReportModal: React.FC<GoogleSheetsReportModalProps> = (
           </div>
 
           {/* Arahan Pantas Import Google Sheets */}
-          <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex flex-col gap-2">
-            <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
-              <FileSpreadsheet className="w-4 h-4" />
-              2 Cara Mudah Membuka Laporan dalam Google Sheets:
+          <div className="p-4 rounded-xl bg-emerald-950/25 border border-emerald-500/30 flex flex-col gap-2.5">
+            <span className="text-xs font-bold text-emerald-300 flex items-center gap-2">
+              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              Pilihan Eksport Terus ke Google Sheets:
             </span>
-            <ol className="text-xs text-[#c2c6d6] list-decimal list-inside space-y-1.5 leading-relaxed">
-              <li>
-                <strong className="text-white">Cara 1 (Salin & Tampal):</strong> Klik butang <em>&quot;Salin untuk Google Sheets&quot;</em> di bawah, buka lembaran di <code>sheets.new</code>, dan tekan <code>Ctrl + V</code> (atau <code>Cmd + V</code>).
-              </li>
-              <li>
-                <strong className="text-white">Cara 2 (Muat Turun Fail):</strong> Klik <em>&quot;Muat Turun Fail CSV&quot;</em>, kemudian di Google Sheets pilih <strong>File → Import → Upload</strong>.
-              </li>
-            </ol>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-[#c2c6d6]">
+              <div className="p-2.5 rounded-lg bg-[#000f21]/70 border border-emerald-500/20 flex flex-col gap-1">
+                <span className="font-semibold text-emerald-300 flex items-center gap-1.5">
+                  <Download className="w-3.5 h-3.5" />
+                  Format Google Sheets (.xlsx)
+                </span>
+                <p className="text-[11px] text-[#8c909f] leading-snug">
+                  Format spreadsheet standard lengkap dengan lajur auto-fit & formula nilai yang boleh dibuka terus dalam Google Sheets atau Excel.
+                </p>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#000f21]/70 border border-emerald-500/20 flex flex-col gap-1">
+                <span className="font-semibold text-[#adc6ff] flex items-center gap-1.5">
+                  <Copy className="w-3.5 h-3.5" />
+                  Salin & Tampal (sheets.new)
+                </span>
+                <p className="text-[11px] text-[#8c909f] leading-snug">
+                  Klik &apos;Salin Data&apos;, buka lembaran baharu di Google Sheets, kemudian tekan <code>Ctrl + V</code> untuk memasukkan data secara pantas.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -437,17 +489,18 @@ export const GoogleSheetsReportModal: React.FC<GoogleSheetsReportModalProps> = (
           <button
             type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-4 py-2 rounded-lg bg-[#1b2b3f] hover:bg-[#26364a] text-xs font-semibold text-[#d3e4fe] transition-colors"
+            className="w-full sm:w-auto px-4 py-2 rounded-lg bg-[#1b2b3f] hover:bg-[#26364a] text-xs font-semibold text-[#d3e4fe] transition-colors cursor-pointer"
           >
             Tutup
           </button>
 
-          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
             {/* Salin ke Papan Klip */}
             <button
               type="button"
               onClick={handleCopyToClipboard}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-[#1b2b3f] hover:bg-[#26364a] text-xs font-bold text-[#d3e4fe] border border-[#334155] transition-colors active:scale-95"
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#1b2b3f] hover:bg-[#26364a] text-xs font-bold text-[#d3e4fe] border border-[#334155] transition-colors active:scale-95 cursor-pointer"
+              title="Salin data ke papan klip untuk tampal terus ke Google Sheets"
             >
               {copied ? (
                 <>
@@ -457,7 +510,7 @@ export const GoogleSheetsReportModal: React.FC<GoogleSheetsReportModalProps> = (
               ) : (
                 <>
                   <Copy className="w-4 h-4 text-[#adc6ff]" />
-                  <span>Salin untuk Google Sheets</span>
+                  <span>Salin Data</span>
                 </>
               )}
             </button>
@@ -466,10 +519,22 @@ export const GoogleSheetsReportModal: React.FC<GoogleSheetsReportModalProps> = (
             <button
               type="button"
               onClick={handleDownloadCSV}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#102034] hover:bg-[#1b2b3f] text-[#d3e4fe] border border-[#334155] text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+              title="Muat turun data dalam format CSV"
             >
-              <Download className="w-4 h-4" />
-              <span>Muat Turun CSV (Google Sheets)</span>
+              <Download className="w-3.5 h-3.5 text-[#8c909f]" />
+              <span>Muat Turun CSV</span>
+            </button>
+
+            {/* Muat Turun Fail Google Sheets (.xlsx) */}
+            <button
+              type="button"
+              onClick={handleDownloadGoogleSheetXLSX}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+              title="Muat turun fail terus dalam format Google Sheets / Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-slate-950" />
+              <span>Muat Turun Google Sheets (.xlsx)</span>
             </button>
           </div>
         </div>
