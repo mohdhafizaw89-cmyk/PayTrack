@@ -1,0 +1,8 @@
+{
+  "name": "Remix RightsFlow - TV Programme Payment Tracker \u0026 Reminder",
+  "description": "Automated broadcast linear and digital rights disbursement pipeline tracking TV programme purchases with strict 7-day payment reminder countdown upon verified material and vendor invoice receipt.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
